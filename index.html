@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Yukkuri Auto Sync</title>
+    <style>
+        body { margin: 0; background: transparent; display: flex; justify-content: center; align-items: flex-end; height: 100vh; overflow: hidden; }
+        .chara-container { position: relative; height: 95vh; width: auto; aspect-ratio: 1/1; }
+        .layer { position: absolute; top: 0; left: 50%; transform: translateX(-50%); height: 100%; width: auto; object-fit: contain; object-position: top center; }
+        img { display: none; }
+        .base { display: block; z-index: 1; }
+        .eye-layer { z-index: 2; }
+        .mouth-layer { z-index: 3; }
+        .show { display: block; }
+    </style>
+</head>
+<body>
+    <div class="chara-container">
+        <img src="f00.png" class="layer base">
+        <img src="目/00.png" id="e0" class="layer eye-layer"><img src="目/00a.png" id="ea" class="layer eye-layer"><img src="目/00b.png" id="eb" class="layer eye-layer"><img src="目/00c.png" id="ec" class="layer eye-layer"><img src="目/00d.png" id="ed" class="layer eye-layer"><img src="目/00e.png" id="ee" class="layer eye-layer">
+        <img src="口/00.png" id="m0" class="layer mouth-layer"><img src="口/00a.png" id="ma" class="layer mouth-layer"><img src="口/00b.png" id="mb" class="layer mouth-layer"><img src="口/00c.png" id="mc" class="layer mouth-layer"><img src="口/00d.png" id="md" class="layer mouth-layer"><img src="口/00e.png" id="me" class="layer mouth-layer">
+    </div>
+
+    <script>
+        const TICK = 10;
+        let isDetected = false; 
+        
+        // --- 口の制御 ---
+        const mouthSeq = ['0','0','0','0','0','0','0','0','a','b','c','d','e','e','e','e','e','e','e','e','d','c','b','a'];
+        const mouthEls = {'0':document.getElementById('m0'),'a':document.getElementById('ma'),'b':document.getElementById('mb'),'c':document.getElementById('mc'),'d':document.getElementById('md'),'e':document.getElementById('me')};
+        let mouthIdx = 0;
+
+        function updateMouth() {
+            for (let k in mouthEls) mouthEls[k].classList.remove('show');
+            if (isDetected) {
+                mouthIdx = (mouthIdx + 1) % mouthSeq.length;
+            } else {
+                mouthIdx = 0;
+            }
+            if(mouthEls[mouthSeq[mouthIdx]]) mouthEls[mouthSeq[mouthIdx]].classList.add('show');
+        }
+        setInterval(updateMouth, TICK);
+
+        // --- 目の制御 ---
+        const eyeSeq = ['0','a','b','c','d','e','d','c','b','a'];
+        const eyeEls = {'0':document.getElementById('e0'),'a':document.getElementById('ea'),'b':document.getElementById('eb'),'c':document.getElementById('ec'),'d':document.getElementById('ed'),'e':document.getElementById('ee')};
+        let eyeIdx = 0;
+        let isBlinking = false;
+
+        function updateEye() {
+            for (let k in eyeEls) eyeEls[k].classList.remove('show');
+            if (isBlinking) {
+                eyeIdx++;
+                if (eyeIdx >= eyeSeq.length) { isBlinking = false; eyeIdx = 0; }
+            }
+            if(eyeEls[eyeSeq[eyeIdx]]) eyeEls[eyeSeq[eyeIdx]].classList.add('show');
+        }
+        setInterval(updateEye, 20);
+        setInterval(() => { isBlinking = true; }, 10000);
+
+        // --- 音声解析（自動再開トライ付き） ---
+        let audioContext;
+        let analyser;
+        let dataArray;
+
+        async function initAudio() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                const source = audioContext.createMediaStreamSource(stream);
+                source.connect(analyser);
+                analyser.fftSize = 256;
+                dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+                const check = () => {
+                    // ブラウザが「suspended（停止中）」なら再開を試みる
+                    if (audioContext.state === 'suspended') {
+                        audioContext.resume();
+                    }
+                    analyser.getByteFrequencyData(dataArray);
+                    let vol = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                    isDetected = vol > 12; // 感度
+                    requestAnimationFrame(check);
+                };
+                check();
+            } catch (err) {
+                console.error("Audio initialization failed:", err);
+            }
+        }
+
+        // ページ読み込み完了時に実行
+        window.onload = initAudio;
+
+        // それでも動かない場合の保険（何かキーを押したり、画面を触った瞬間に1回だけ実行）
+        window.addEventListener('mousedown', () => { if(audioContext) audioContext.resume(); });
+        window.addEventListener('keydown', () => { if(audioContext) audioContext.resume(); });
+    </script>
+</body>
+</html>
